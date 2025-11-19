@@ -1,0 +1,24 @@
+#!/bin/bash
+
+#PBS -l walltime=48:00:00
+#PBS -N PBMC_Gimmemotifs_default
+#PBS -l nodes=1:ppn=12
+#PBS -l mem=50gb
+#PBS -m abe
+
+
+# go to the (current) working directory (optional, if this is the
+# directory where you submitted the job)
+cd $PBS_O_WORKDIR  
+
+# Load some modules
+module purge
+module load GimmeMotifs/0.17.2-foss-2023a
+
+# the program that you want to run
+echo Start Job
+
+gimme scan /scratch/gent/vo/000/gvo00027/projects/CBIGR/24JLR_GRN/data/human_PBMC_10x_10k/pbmc_granulocyte_sorted_10k_atac_peaks.bed -g hg38 -n 10 --zscore --gc -N 4 -t -f 0.1 > /scratch/gent/vo/000/gvo00027/projects/CBIGR/24JLR_GRN/data/human_PBMC_10x_10k/pbmc_granulocyte_sorted_10k_atac_peaks_motif_matches.tsv
+
+echo End Job
+

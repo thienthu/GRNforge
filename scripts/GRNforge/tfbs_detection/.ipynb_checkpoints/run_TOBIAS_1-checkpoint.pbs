@@ -1,0 +1,26 @@
+#!/bin/bash
+
+#PBS -l walltime=48:00:00
+#PBS -N PBMC_TOBIAS_RUN
+#PBS -l nodes=1:ppn=12
+#PBS -l mem=50gb
+#PBS -m abe
+
+
+# go to the (current) working directory (optional, if this is the
+# directory where you submitted the job)
+cd $PBS_O_WORKDIR  
+
+# Load some modules
+module purge
+module load TOBIAS/0.16.1-foss-2023a
+
+# the program that you want to run
+echo Start Job
+
+TOBIAS ATACorrect --bam /scratch/gent/vo/000/gvo00027/projects/CBIGR/24JLR_GRN/data/human_PBMC_10x_10k/pbmc_granulocyte_sorted_10k_atac_possorted_bam.bam --genome /scratch/gent/vo/000/gvo00027/projects/CBIGR/22SQW_master_thesis_project/scHi-C_analysis/data/hg38.fa --peaks /scratch/gent/vo/000/gvo00027/projects/CBIGR/24JLR_GRN/data/human_PBMC_10x_10k/pbmc_granulocyte_sorted_10k_atac_peaks.bed --blacklist /scratch/gent/vo/000/gvo00027/projects/CBIGR/data/TCGA/TCGA_GBM/hg38-blacklist.v2.txt --outdir /scratch/gent/vo/000/gvo00027/projects/CBIGR/24JLR_GRN/results/human_PBMC_10x_10k/ --cores 12
+
+TOBIAS FootprintScores --signal /scratch/gent/vo/000/gvo00027/projects/CBIGR/24JLR_GRN/results/human_PBMC_10x_10k/pbmc_granulocyte_sorted_10k_atac_peaks.bw  --regions /scratch/gent/vo/000/gvo00027/projects/CBIGR/24JLR_GRN/data/human_PBMC_10x_10k/pbmc_granulocyte_sorted_10k_atac_peaks.bed --output /scratch/gent/vo/000/gvo00027/projects/CBIGR/24JLR_GRN/results/human_PBMC_10x_10k/pbmc_granulocyte_sorted_10k_atac_peaks_footprints.bw --cores 12
+
+echo End Job
+

@@ -1,0 +1,5 @@
+The following modules were not unloaded:
+  (Use "module --force purge" to unload all):
+
+  1) env/vsc/shinx     3) env/software/shinx
+  2) env/slurm/shinx   4) cluster/shinx

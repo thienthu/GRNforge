@@ -402,301 +402,304 @@ if __name__ == '__main__':
     TG_models_act_exp_scores            = {}
     TG_models_act_exp_evals             = {}
     TG_models_act_exp_pred_performance  = {}
-    
-    # mode : loaded from the pbs, so that the script is flexible with reagrd to which model to calcuate (e.g. exp_exp, actCOP_act, ...), and which set of TGs to calculate
-    model_mode  = str(argv[1])#'exp_exp'
-    chunk_start = int(argv[2])#10
-    chunk_end   = int(argv[3])#20
-    
-    # model_mode  = 'exp_act'
-    # chunk_start = 30
-    # chunk_end   = 50
-
-    
-    ##  Define model specific properties. As the logic is always the same, I only put detailed comments to the first
-    a=datetime.utcnow()
-    
-    if model_mode == 'act_exp' or model_mode == 'exp_act' or model_mode == 'actCOP_exp' or model_mode == 'expCOP_act':
-        # filter only for same cells across modalities to avoid missmatches
-        expression_adata_i   = expression_adata_i[expression_adata_i.obs_names.isin(set(geneactivity_adata_i.obs_names).intersection(set(expression_adata_i.obs_names))), :]
-        geneactivity_adata_i =  geneactivity_adata_i[geneactivity_adata_i.obs_names.isin(set(geneactivity_adata_i.obs_names).intersection(set(expression_adata_i.obs_names))), :]
-
-
-    if model_mode == 'expCOP_exp' or model_mode == 'actCOP_exp':
         
-        # import the cliques (putative TF-TF cooperation complexes)
-        with gzip.open(data_folder + clique_path, "rb") as file: 
-            cliques = pickle.load(file)        
+    model_modes = ['exp_exp', 'expCOP_exp',  'expCOP_act', 'act_act', 'exp_act', 'act_exp', 'actCOP_exp', 'actCOP_act']
+    n_gt = len(overlapping_genes)
+    step = 1000
+    for model_mode in model_modes:
+        for i in range(0, n_gt, step):
+            chunk_start = i
+            chunk_end = i + step - 1
 
-        # next, prepare the modified feature matrices to only contain TFs that are presumed regulators specified in the baseGRN
-        for target_gene in expression_adata_i.var_names[chunk_start:chunk_end]:#base_eGRN.TF_set: 
+            if chunk_end >= n_gt :
+                chunk_end = n_gt-1
+            print('-----------------------------------------------------------')
+            print(f"Running the model {model_mode}: {chunk_start}-{chunk_end}")
+            print('------------------------------------------------------------')    
+            ##  Define model specific properties. As the logic is always the same, I only put detailed comments to the first
+            a=datetime.utcnow()
+            
+            if model_mode == 'act_exp' or model_mode == 'exp_act' or model_mode == 'actCOP_exp' or model_mode == 'expCOP_act':
+                # filter only for same cells across modalities to avoid missmatches
+                expression_adata_i   = expression_adata_i[expression_adata_i.obs_names.isin(set(geneactivity_adata_i.obs_names).intersection(set(expression_adata_i.obs_names))), :]
+                geneactivity_adata_i =  geneactivity_adata_i[geneactivity_adata_i.obs_names.isin(set(geneactivity_adata_i.obs_names).intersection(set(expression_adata_i.obs_names))), :]
 
-            # Remove if not exist 
-            if target_gene not in expression_adata_i.var_names:
-                print(target_gene, 'not found')
-                continue
 
-            # set target gene name
-            target = [target_gene]
-            print(target)
-
-            # get necessary data
-            c=datetime.utcnow()
-
-            if model_mode == 'expCOP_exp':
-                try:
-                    y, X, feature_map   = getTargetAndPredictorExpressionWithCliques(expression_adata_i, base_eGRN, target, cliques, random_state=40, verbose=True)
-                except:
-                    print('error with ',target_gene)
-                    continue
-                    
-            if model_mode == 'actCOP_exp':
-                # get predictors from expression layer
-                try:
-                    print('before', len(geneactivity_adata_i.obs_names))
-                    y_not_used, X, feature_map   = getTargetAndPredictorExpressionWithCliques(geneactivity_adata_i, base_eGRN, target, cliques, random_state=40, verbose=True)
-                except:
-                    print('error with ',target_gene)
-                    continue
-                # get target from expression layer
-                try:
-                    y, X_not_used, feature_map_not_used   = getTargetAndPredictorExpression(expression_adata_i, base_eGRN, target, random_state=40, verbose=True)
-                except:
-                    print('error with ',target_gene)
-                    continue
-
- 
-             # make the regression model
-            d=datetime.utcnow()
-
-            # Some extra filters, to avoid features with too little counts
-            if sum(y) < 500:
-                print('skip',  target_gene, 'for number of counts')
-
-            if len(X) == 0 or len(X[0]) == 0:
-                print('skip',  target_gene, 'for number of predictors')
-                continue
-            # initalize model
-            model = ModelGRN(X,y,feature_map, params)
-            # # prepare train-test split for model
-            model.makeTrainTestSplit()
-            # # train model
-            model.trainModelCV()
-            TG_models_exp_exp_scores[target_gene]                = model.mapped_importance_scores
-            TG_models_exp_exp_scores_rank_deviation[target_gene] = model.importance_scores_stdrnk
-            TG_models_exp_exp_evals[target_gene]                 = model.evals_result
-            TG_models_exp_exp_pred_performance[target_gene]      = (model.data_mean, model.train_mae, model.test_mae, model.test_mae_std, model.train_mae_std)                    
+            if model_mode == 'expCOP_exp' or model_mode == 'actCOP_exp':
                 
-    
-    if model_mode == 'exp_exp' or model_mode == 'act_exp':
-    
-        for target_gene in expression_adata_i.var_names[chunk_start:chunk_end]:#base_eGRN.TF_set: 
+                # import the cliques (putative TF-TF cooperation complexes)
+                with gzip.open(data_folder + clique_path, "rb") as file: 
+                    cliques = pickle.load(file)        
 
-            # Remove if not exist 
-            if target_gene not in expression_adata_i.var_names:
-                print(target_gene, 'not found')
-                continue
+                # next, prepare the modified feature matrices to only contain TFs that are presumed regulators specified in the baseGRN
+                for target_gene in expression_adata_i.var_names[chunk_start:chunk_end]:#base_eGRN.TF_set: 
 
-            # set target gene name
-            target = [target_gene]
-            print(target)
+                    # Remove if not exist 
+                    if target_gene not in expression_adata_i.var_names:
+                        print(target_gene, 'not found')
+                        continue
 
-            # get necessary data
-            c=datetime.utcnow()
+                    # set target gene name
+                    target = [target_gene]
+                    print(target)
 
-            if model_mode == 'exp_exp':
-                try:
-                    y, X, feature_map   = getTargetAndPredictorExpression(expression_adata_i, base_eGRN, target, random_state=40, verbose=True)
-                except:
-                    print('error with ',target_gene)
-                    continue
-            if model_mode == 'act_exp':
-                # get predictors from expression layer
-                try:
-                    print('before', len(geneactivity_adata_i.obs_names))
-                    y_not_used, X, feature_map   = getTargetAndPredictorExpression(geneactivity_adata_i, base_eGRN, target, random_state=40, verbose=True)
-                except:
-                    print('error with ',target_gene)
-                    continue
-                # get target from expression layer
-                try:
-                    y, X_not_used, feature_map_not_used   = getTargetAndPredictorExpression(expression_adata_i, base_eGRN, target, random_state=40, verbose=True)
-                except:
-                    print('error with ',target_gene)
-                    continue
+                    # get necessary data
+                    c=datetime.utcnow()
 
-             # # regression model
-            d=datetime.utcnow()
+                    if model_mode == 'expCOP_exp':
+                        try:
+                            y, X, feature_map   = getTargetAndPredictorExpressionWithCliques(expression_adata_i, base_eGRN, target, cliques, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
+                            
+                    if model_mode == 'actCOP_exp':
+                        # get predictors from expression layer
+                        try:
+                            print('before', len(geneactivity_adata_i.obs_names))
+                            y_not_used, X, feature_map   = getTargetAndPredictorExpressionWithCliques(geneactivity_adata_i, base_eGRN, target, cliques, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
+                        # get target from expression layer
+                        try:
+                            y, X_not_used, feature_map_not_used   = getTargetAndPredictorExpression(expression_adata_i, base_eGRN, target, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
 
-            if sum(y) < 500:
-                print('skip',  target_gene, 'for number of counts')
+        
+                    # make the regression model
+                    d=datetime.utcnow()
 
-            if len(X) == 0 or len(X[0]) == 0:
-                print('skip',  target_gene, 'for number of predictors')
-                continue
+                    # Some extra filters, to avoid features with too little counts
+                    if sum(y) < 500:
+                        print('skip',  target_gene, 'for number of counts')
 
-            model = ModelGRN(X,y,feature_map, params)
-            # # prepare train-test split for model
-            model.makeTrainTestSplit()
-            # # train model
-            model.trainModelCV()
-            TG_models_exp_exp_scores[target_gene]                = model.mapped_importance_scores
-            TG_models_exp_exp_scores_rank_deviation[target_gene] = model.importance_scores_stdrnk
-            TG_models_exp_exp_evals[target_gene]                 = model.evals_result
-            TG_models_exp_exp_pred_performance[target_gene]      = (model.data_mean, model.train_mae, model.test_mae, model.test_mae_std, model.train_mae_std)                    
+                    if len(X) == 0 or len(X[0]) == 0:
+                        print('skip',  target_gene, 'for number of predictors')
+                        continue
+                    # initalize model
+                    model = ModelGRN(X,y,feature_map, params)
+                    # # prepare train-test split for model
+                    model.makeTrainTestSplit()
+                    # # train model
+                    model.trainModelCV()
+                    TG_models_exp_exp_scores[target_gene]                = model.mapped_importance_scores
+                    TG_models_exp_exp_scores_rank_deviation[target_gene] = model.importance_scores_stdrnk
+                    TG_models_exp_exp_evals[target_gene]                 = model.evals_result
+                    TG_models_exp_exp_pred_performance[target_gene]      = (model.data_mean, model.train_mae, model.test_mae, model.test_mae_std, model.train_mae_std)                    
+                        
+            
+            if model_mode == 'exp_exp' or model_mode == 'act_exp':
+            
+                for target_gene in expression_adata_i.var_names[chunk_start:chunk_end]:#base_eGRN.TF_set: 
+
+                    # Remove if not exist 
+                    if target_gene not in expression_adata_i.var_names:
+                        print(target_gene, 'not found')
+                        continue
+
+                    # set target gene name
+                    target = [target_gene]
+                    print(target)
+
+                    # get necessary data
+                    c=datetime.utcnow()
+
+                    if model_mode == 'exp_exp':
+                        try:
+                            y, X, feature_map   = getTargetAndPredictorExpression(expression_adata_i, base_eGRN, target, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
+                    if model_mode == 'act_exp':
+                        # get predictors from expression layer
+                        try:
+                            print('before', len(geneactivity_adata_i.obs_names))
+                            y_not_used, X, feature_map   = getTargetAndPredictorExpression(geneactivity_adata_i, base_eGRN, target, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
+                        # get target from expression layer
+                        try:
+                            y, X_not_used, feature_map_not_used   = getTargetAndPredictorExpression(expression_adata_i, base_eGRN, target, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
+
+                    # # regression model
+                    d=datetime.utcnow()
+
+                    if sum(y) < 500:
+                        print('skip',  target_gene, 'for number of counts')
+
+                    if len(X) == 0 or len(X[0]) == 0:
+                        print('skip',  target_gene, 'for number of predictors')
+                        continue
+
+                    model = ModelGRN(X,y,feature_map, params)
+                    # # prepare train-test split for model
+                    model.makeTrainTestSplit()
+                    # # train model
+                    model.trainModelCV()
+                    TG_models_exp_exp_scores[target_gene]                = model.mapped_importance_scores
+                    TG_models_exp_exp_scores_rank_deviation[target_gene] = model.importance_scores_stdrnk
+                    TG_models_exp_exp_evals[target_gene]                 = model.evals_result
+                    TG_models_exp_exp_pred_performance[target_gene]      = (model.data_mean, model.train_mae, model.test_mae, model.test_mae_std, model.train_mae_std)                    
+                            
+            if model_mode == 'act_act' or model_mode == 'exp_act':
+            
+                for target_gene in geneactivity_adata_i.var_names[chunk_start:chunk_end]:#base_eGRN.TF_set: 
+                    # Remove if not exist 
+                    if target_gene not in geneactivity_adata_i.var_names:
+                        print(target_gene, 'not found')
+                        continue
+
+                    # set target gene name
+                    target = [target_gene]
+                    print(target)
+
+                    # get necessary data
+                    c=datetime.utcnow()
+
+                    if model_mode == 'act_act':
+                        try:
+                            y, X, feature_map   = getTargetAndPredictorExpression(geneactivity_adata_i, base_eGRN, target, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
+                    if model_mode == 'exp_act':
+                        # get predictors from expression layer
+                        try:
+                            y_not_used, X, feature_map   = getTargetAndPredictorExpression(expression_adata_i, base_eGRN, target, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
+                        # get target from expression layer
+                        try:
+                            y, X_not_used, feature_map_not_used   = getTargetAndPredictorExpression(geneactivity_adata_i, base_eGRN, target, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
+
+                
+                    # # regression model
+                    d=datetime.utcnow()
+
+                    if sum(y) < 500:
+                        print('skip',  target_gene, 'for number of counts')
+
+                    if len(X) == 0 or len(X[0]) == 0:
+                        print('skip',  target_gene, 'for number of predictors')
+                        continue
+
+                    model = ModelGRN(X,y,feature_map, params)
+                    # # prepare train-test split for model
+                    model.makeTrainTestSplit()
+                    # # train model
+                    model.trainModelCV()
+                    TG_models_exp_exp_scores[target_gene]                = model.mapped_importance_scores
+                    TG_models_exp_exp_scores_rank_deviation[target_gene] = model.importance_scores_stdrnk
+                    TG_models_exp_exp_evals[target_gene]                 = model.evals_result
+                    TG_models_exp_exp_pred_performance[target_gene]      = (model.data_mean, model.train_mae, model.test_mae, model.test_mae_std, model.train_mae_std)
                     
-    if model_mode == 'act_act' or model_mode == 'exp_act':
-    
-        for target_gene in geneactivity_adata_i.var_names[chunk_start:chunk_end]:#base_eGRN.TF_set: 
-            # Remove if not exist 
-            if target_gene not in geneactivity_adata_i.var_names:
-                print(target_gene, 'not found')
-                continue
 
-            # set target gene name
-            target = [target_gene]
-            print(target)
+                    print(d-c)
+                b=datetime.utcnow()
+                print(b-a)
+                
+            if model_mode == 'actCOP_act' or model_mode == 'expCOP_act':
 
-            # get necessary data
-            c=datetime.utcnow()
+                # import the cliques
+                with gzip.open(data_folder + clique_path, "rb") as file:  # 'wb' means write in binary mode
+                    cliques = pickle.load(file)        
 
-            if model_mode == 'act_act':
-                try:
-                    y, X, feature_map   = getTargetAndPredictorExpression(geneactivity_adata_i, base_eGRN, target, random_state=40, verbose=True)
-                except:
-                    print('error with ',target_gene)
-                    continue
-            if model_mode == 'exp_act':
-                # get predictors from expression layer
-                try:
-                    y_not_used, X, feature_map   = getTargetAndPredictorExpression(expression_adata_i, base_eGRN, target, random_state=40, verbose=True)
-                except:
-                    print('error with ',target_gene)
-                    continue
-                # get target from expression layer
-                try:
-                    y, X_not_used, feature_map_not_used   = getTargetAndPredictorExpression(geneactivity_adata_i, base_eGRN, target, random_state=40, verbose=True)
-                except:
-                    print('error with ',target_gene)
-                    continue
+                
+                for target_gene in geneactivity_adata_i.var_names[chunk_start:chunk_end]:#base_eGRN.TF_set: 
+                    # Remove if not exist 
+                    if target_gene not in geneactivity_adata_i.var_names:
+                        print(target_gene, 'not found')
+                        continue
 
-           
-            # # regression model
-            d=datetime.utcnow()
+                    # set target gene name
+                    target = [target_gene]
+                    print(target)
 
-            if sum(y) < 500:
-                print('skip',  target_gene, 'for number of counts')
+                    # get necessary data
+                    c=datetime.utcnow()
+                    print(len(geneactivity_adata_i.obs), len(expression_adata_i.obs))
 
-            if len(X) == 0 or len(X[0]) == 0:
-                print('skip',  target_gene, 'for number of predictors')
-                continue
+                    if model_mode == 'actCOP_act':
+                        try:
+                            y, X, feature_map   = getTargetAndPredictorExpressionWithCliques(geneactivity_adata_i, base_eGRN, target, cliques, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
+                    if model_mode == 'expCOP_act':
+                        # get predictors from expression layer
+                        try:
+                            y_not_used, X, feature_map   = getTargetAndPredictorExpressionWithCliques(expression_adata_i, base_eGRN, target, cliques, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
+                        # get target from expression layer
+                        try:
+                            y, X_not_used, feature_map_not_used   = getTargetAndPredictorExpression(geneactivity_adata_i, base_eGRN, target, random_state=40, verbose=True)
+                        except:
+                            print('warning: ',target_gene, 'not found')
+                            continue
 
-            model = ModelGRN(X,y,feature_map, params)
-            # # prepare train-test split for model
-            model.makeTrainTestSplit()
-            # # train model
-            model.trainModelCV()
-            TG_models_exp_exp_scores[target_gene]                = model.mapped_importance_scores
-            TG_models_exp_exp_scores_rank_deviation[target_gene] = model.importance_scores_stdrnk
-            TG_models_exp_exp_evals[target_gene]                 = model.evals_result
-            TG_models_exp_exp_pred_performance[target_gene]      = (model.data_mean, model.train_mae, model.test_mae, model.test_mae_std, model.train_mae_std)
-            
+                    # print(X.shape[0], y.shape[0])
+                    # if X.shape[0] != y.shape[0]:
+                    #     print(X.shape[0], y.shape[0], 'skip')
+                    #     continue
+                    
+                    # # regression model
+                    d=datetime.utcnow()
 
-            print(d-c)
-        b=datetime.utcnow()
-        print(b-a)
-        
-    if model_mode == 'actCOP_act' or model_mode == 'expCOP_act':
+                    if sum(y) < 500:
+                        print('skip',  target_gene, 'for number of counts')
 
-        # import the cliques
-        with gzip.open(data_folder + clique_path, "rb") as file:  # 'wb' means write in binary mode
-            cliques = pickle.load(file)        
+                    if len(X) == 0 or len(X[0]) == 0:
+                        print('skip',  target_gene, 'for number of predictors')
+                        continue
 
-        
-        for target_gene in geneactivity_adata_i.var_names[chunk_start:chunk_end]:#base_eGRN.TF_set: 
-            # Remove if not exist 
-            if target_gene not in geneactivity_adata_i.var_names:
-                print(target_gene, 'not found')
-                continue
+                    model = ModelGRN(X,y,feature_map, params)
+                    # # prepare train-test split for model
+                    model.makeTrainTestSplit()
+                    # # train model
+                    model.trainModelCV()
+                    TG_models_exp_exp_scores[target_gene]                = model.mapped_importance_scores
+                    TG_models_exp_exp_scores_rank_deviation[target_gene] = model.importance_scores_stdrnk
+                    TG_models_exp_exp_evals[target_gene]                 = model.evals_result
+                    TG_models_exp_exp_pred_performance[target_gene]      = (model.data_mean, model.train_mae, model.test_mae, model.test_mae_std, model.train_mae_std)
+                    
 
-            # set target gene name
-            target = [target_gene]
-            print(target)
-
-            # get necessary data
-            c=datetime.utcnow()
-            print(len(geneactivity_adata_i.obs), len(expression_adata_i.obs))
-
-            if model_mode == 'actCOP_act':
-                try:
-                    y, X, feature_map   = getTargetAndPredictorExpressionWithCliques(geneactivity_adata_i, base_eGRN, target, cliques, random_state=40, verbose=True)
-                except:
-                    print('error with ', target_gene)
-                    continue
-            if model_mode == 'expCOP_act':
-                # get predictors from expression layer
-                try:
-                    y_not_used, X, feature_map   = getTargetAndPredictorExpressionWithCliques(expression_adata_i, base_eGRN, target, cliques, random_state=40, verbose=True)
-                except:
-                    print('error with ', target_gene)
-                    continue
-                # get target from expression layer
-                try:
-                    y, X_not_used, feature_map_not_used   = getTargetAndPredictorExpression(geneactivity_adata_i, base_eGRN, target, random_state=40, verbose=True)
-                except:
-                    print('error with ', target_gene)
-                    continue
-
-            # print(X.shape[0], y.shape[0])
-            # if X.shape[0] != y.shape[0]:
-            #     print(X.shape[0], y.shape[0], 'skip')
-            #     continue
-            
-            # # regression model
-            d=datetime.utcnow()
-
-            if sum(y) < 500:
-                print('skip',  target_gene, 'for number of counts')
-
-            if len(X) == 0 or len(X[0]) == 0:
-                print('skip',  target_gene, 'for number of predictors')
-                continue
-
-            model = ModelGRN(X,y,feature_map, params)
-            # # prepare train-test split for model
-            model.makeTrainTestSplit()
-            # # train model
-            model.trainModelCV()
-            TG_models_exp_exp_scores[target_gene]                = model.mapped_importance_scores
-            TG_models_exp_exp_scores_rank_deviation[target_gene] = model.importance_scores_stdrnk
-            TG_models_exp_exp_evals[target_gene]                 = model.evals_result
-            TG_models_exp_exp_pred_performance[target_gene]      = (model.data_mean, model.train_mae, model.test_mae, model.test_mae_std, model.train_mae_std)
-            
-
-            print(d-c)
-        b=datetime.utcnow()
-        print(b-a)
+                    print(d-c)
+                b=datetime.utcnow()
+                print(b-a)
 
 
-    # Create the directory if it doesn't exist
-    if not os.path.exists(base_result_path+run_name+'/model_'+model_mode+'/'):
-        os.makedirs(base_result_path+run_name+'/model_'+model_mode+'/')
+            # Create the directory if it doesn't exist
+            if not os.path.exists(base_result_path+run_name+'/model_'+model_mode+'/'):
+                os.makedirs(base_result_path+run_name+'/model_'+model_mode+'/')
 
-    # print(TG_models_exp_exp_scores)
-    # print(base_result_path+run_name+'/model_'+model_mode+'/')
+            # print(TG_models_exp_exp_scores)
+            # print(base_result_path+run_name+'/model_'+model_mode+'/')
 
-    # Save the results to pickle files        
-    path_to_save = base_result_path+run_name+'/model_'+model_mode+'/model_'+str(chunk_start)+'_'+str(chunk_end)+'_'+'scores.pkl'
-    with gzip.open(path_to_save, "wb") as file:  # 'wb' means write in binary mode
-        pickle.dump(TG_models_exp_exp_scores, file)
-    path_to_save = base_result_path+run_name+'/model_'+model_mode+'/model_'+str(chunk_start)+'_'+str(chunk_end)+'_'+'scores_rank_deviation.pkl'
-    with gzip.open(path_to_save, "wb") as file:  # 'wb' means write in binary mode
-        pickle.dump(TG_models_exp_exp_scores_rank_deviation, file)
-    path_to_save = base_result_path+run_name+'/model_'+model_mode+'/model_'+str(chunk_start)+'_'+str(chunk_end)+'_'+'evals.pkl'
-    with gzip.open(path_to_save, "wb") as file:  # 'wb' means write in binary mode
-        pickle.dump(TG_models_exp_exp_evals, file)    
-    path_to_save = base_result_path+run_name+'/model_'+model_mode+'/model_'+str(chunk_start)+'_'+str(chunk_end)+'_'+'predictive_performance.pkl'
-    with gzip.open(path_to_save, "wb") as file:  # 'wb' means write in binary mode
-        pickle.dump(TG_models_exp_exp_pred_performance, file)
+            # Save the results to pickle files        
+            path_to_save = base_result_path+run_name+'/model_'+model_mode+'/model_'+str(chunk_start)+'_'+str(chunk_end)+'_'+'scores.pkl'
+            with gzip.open(path_to_save, "wb") as file:  # 'wb' means write in binary mode
+                pickle.dump(TG_models_exp_exp_scores, file)
+            path_to_save = base_result_path+run_name+'/model_'+model_mode+'/model_'+str(chunk_start)+'_'+str(chunk_end)+'_'+'scores_rank_deviation.pkl'
+            with gzip.open(path_to_save, "wb") as file:  # 'wb' means write in binary mode
+                pickle.dump(TG_models_exp_exp_scores_rank_deviation, file)
+            path_to_save = base_result_path+run_name+'/model_'+model_mode+'/model_'+str(chunk_start)+'_'+str(chunk_end)+'_'+'evals.pkl'
+            with gzip.open(path_to_save, "wb") as file:  # 'wb' means write in binary mode
+                pickle.dump(TG_models_exp_exp_evals, file)    
+            path_to_save = base_result_path+run_name+'/model_'+model_mode+'/model_'+str(chunk_start)+'_'+str(chunk_end)+'_'+'predictive_performance.pkl'
+            with gzip.open(path_to_save, "wb") as file:  # 'wb' means write in binary mode
+                pickle.dump(TG_models_exp_exp_pred_performance, file)
 
 

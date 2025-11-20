@@ -1,8 +1,9 @@
 import sys
 import os
+import glob, re
 import pandas as pd
 import numpy as np
-import pickle
+import pickle 
 import gzip
 import anndata as ad
 import xgboost as xgb
@@ -23,8 +24,11 @@ from scipy.spatial.distance import squareform
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
+
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
+gparent_dir = os.path.dirname(os.path.dirname(parent_dir))
 sys.path.append(os.path.join(parent_dir, "grn_prediction"))
 # print(os.path.join(parent_dir, "grn_prediction"))
 # sys.path.append("../grn_prediction")
@@ -815,17 +819,21 @@ def calculate_hypergeometric_probability(n1, n2, total_elements=804):
 
 if __name__ == "__main__" :
 
+    print("-----------------Post-processing step-----------------")
+    print("------------------------------------------------------")
     # Folder set-up
-    base_result_path = 'results/GRN_test_runs/'
-    run_name         = 'run_1/'
+    base_result_path = 'results/human_PBMC_10x_10k/GRN_test_runs/'
+    run_name         = 'run_1'
     result_folder_1       = 'results/'
     path_to_expression    = 'data/test/PBMC10k_gex_normalized_log1p_testing.h5ad'
     path_to_geneactivity = 'data/test/PBMC10k_gene_activity_matrix_testing.h5ad'
     # path_to_regulons      = 'results/GRN_test_runs/run_1/models_pruned/'
+    path_to_signature = 'results/human_PBMC_10x_10k/GRN_test_runs/run_1'
     get_annotation_adata  = 'data/test/PBMC10k_gex_normalized_log1p_ann_testing.h5ad'
     models = ['exp_exp',  'act_act', 'exp_act', 'act_exp', 'expCOP_exp', 'actCOP_act', 'expCOP_act', 'actCOP_exp']
-
+    path_to_thresholds = path_to_signature + '/threshold.csv'
     # load blacklist for genes with overlapping gene bodies in the ATAC-activity based networks to avoid artifical gene activity correlations
+    print("Loading data...")
     path_bed_overlap = 'data/universal_files/overlapping_genes.bed'
     bed_file_bl      = pd.read_csv(path_bed_overlap, sep='\t', header=None)
     bed_file_bl[9] = bed_file_bl[8]/(bed_file_bl[2] - bed_file_bl[1])
@@ -853,7 +861,7 @@ if __name__ == "__main__" :
 
     # cluster_df = pd.DataFrame({'Barcode': geneactivity_adata.obs['leiden'].index, 'Cluster': geneactivity_adata.obs['leiden']})
     # cluster_df.to_csv('../../../../data//human_PBMC_10x_10k/enhlink/clusters.tsv', index=False, sep='\t')
-
+    print("Identifying threshold...")
     # Calculate the dropout rate for each feature (gene) in the activity matrix. For expression, we already have it at this point
     dropout_percentage = np.sum(geneactivity_adata.X == 0, axis=0) / geneactivity_adata.shape[0] * 100
 
@@ -916,11 +924,11 @@ if __name__ == "__main__" :
     save_dict_to_pickle(all_interactions_to_keep, result_folder_1+ '/all_interactions_to_keep_per_TSS_thresold.pkl')
 
     # It is the fastest to just pickle the data and load it instead of recalcauting the base GRN every time
-    # all_interactions_to_keep = load_dict_from_pickle(result_folder_3+ '/all_interactions_to_keep_per_TSS_thresold.pkl')
+    all_interactions_to_keep = load_dict_from_pickle(result_folder_1+ '/all_interactions_to_keep_per_TSS_thresold.pkl')
 
     # lets start with loading the XGBoost outputs for the 8 inter- and intra omics models first. The ranges indicate different blocks of parallelization
     # that were done while calculating the XGBoost outputs, and signify a set of genes respectively
-
+    print("Running model...")
     models = ['exp_exp',  'act_act', 'exp_act', 'act_exp', 'expCOP_exp', 'actCOP_act', 'expCOP_act', 'actCOP_exp']
 
     # Define data structure
@@ -931,12 +939,13 @@ if __name__ == "__main__" :
 
     # load results: adapt ranges towards how the model was split
     for m in models:
-
-        path = base_result_path+run_name+'model_'+ m + '/'
-
         # load scores
-        for i in range(0, 19000, 1000):
-            with gzip.open(path+'/model_' + str(i) +'_'+ str(i+999) +'_scores.pkl', 'rb') as handle:
+        folder_path = gparent_dir + '/' +base_result_path+run_name + '/' + 'model_' + m
+        file_names = [f for f in os.listdir(folder_path) if f.endswith("_scores.pkl")]
+        file_names = sorted(file_names)
+        
+        for file_name in file_names:
+            with gzip.open(folder_path + '/' +file_name, 'rb') as handle:
                 scores = pickle.load(handle)
                 if m not in TG_models_scores:
                     TG_models_scores[m] = scores
@@ -944,8 +953,12 @@ if __name__ == "__main__" :
                     TG_models_scores[m].update(scores)
                     
         # load rank deviations
-        for i in range(0, 19000, 1000):
-            with gzip.open(path+'/model_' + str(i) +'_'+ str(i+999) +'_scores_rank_deviation.pkl', 'rb') as handle:
+        folder_path = gparent_dir + '/' +base_result_path+run_name + '/' + 'model_' + m
+        file_names = [f for f in os.listdir(folder_path) if f.endswith("_scores_rank_deviation.pkl")]
+        file_names = sorted(file_names)
+        
+        for file_name in file_names:
+            with gzip.open(folder_path + '/' +file_name, 'rb') as handle:
                 scores = pickle.load(handle)
                 if m not in TG_models_rank_deviation:
                     TG_models_rank_deviation[m] = scores
@@ -953,8 +966,12 @@ if __name__ == "__main__" :
                     TG_models_rank_deviation[m].update(scores)
                     
         # load model evals
-        for i in range(0, 19000, 1000):
-            with gzip.open(path+'/model_' + str(i) +'_'+ str(i+999) +'_evals.pkl', 'rb') as handle:
+        folder_path = gparent_dir + '/' +base_result_path+run_name + '/' + 'model_' + m
+        file_names = [f for f in os.listdir(folder_path) if f.endswith("_evals.pkl")]
+        file_names = sorted(file_names)
+        
+        for file_name in file_names:
+            with gzip.open(folder_path + '/' +file_name, 'rb') as handle:
                 scores = pickle.load(handle)
                 if m not in TG_models_evals:
                     TG_models_evals[m] = scores
@@ -962,8 +979,12 @@ if __name__ == "__main__" :
                     TG_models_evals[m].update(scores)        
                     
         # load model performacnce
-        for i in range(0, 19000, 1000):
-            with gzip.open(path+'/model_' + str(i) +'_'+ str(i+999) +'_predictive_performance.pkl', 'rb') as handle:
+        folder_path = gparent_dir + '/' +base_result_path+run_name + '/' + 'model_' + m
+        file_names = [f for f in os.listdir(folder_path) if f.endswith("_predictive_performance.pkl")]
+        file_names = sorted(file_names)
+        
+        for file_name in file_names:
+            with gzip.open(folder_path + '/' +file_name, 'rb') as handle:
                 scores = pickle.load(handle)
                 if m not in TG_models_pred_performance:
                     TG_models_pred_performance[m] = scores
@@ -989,11 +1010,13 @@ if __name__ == "__main__" :
     # Edges? Less is better, but more means we can effectively benchmark deeper due to the overlap with collecTRI...
 
     # make networks
+    print("Generating networks...")
     k            = 30 # maximum anmount of scoring scale per TF-> meaning we scale for the sum of the top 30 regulators, to avoid a bit spourious tails which would de-preioritize TFs in models with lagere number of potential TF regulators
     n_edges      = 20000 # better to do 50000 in the benchmark, as we can effectilvey only benchmark 6000/20000 interactions
     min_reg_size = 10 # Ten is fine. I would not go lower
     #filter_TGs  = None
     filter_TGs   = only_proteincoding_genes
+        
     filter_int_TSS   = all_interactions_to_keep[100000]
 
     regulons_all                    = {}
@@ -1028,9 +1051,9 @@ if __name__ == "__main__" :
             regulons_all[model], interactions_all[model], TF_TG_interactions_binary_all[model], TF_TG_interactions_weighted_all[model] = makeCustomNetwork(new_scores_all, minimum_regulon_size=min_reg_size, number_edges=n_edges, filter_TGs=filter_TGs, filter_interactions=filter_int_TSS, filter_interactions_keep=True, verbose=False)
 
     # load enhancer-based models
-    for model in ['enh_exp', 'enh_act']:
-        # Filter act models also for blacklisted interactions
-        regulons_all[model], interactions_all[model], TF_TG_interactions_binary_all[model], TF_TG_interactions_weighted_all[model] = makeCustomNetwork(TG_models_scores[model], minimum_regulon_size=min_reg_size, number_edges=n_edges, filter_TGs=filter_TGs, filter_interactions=filter_int_TSS, filter_interactions_keep=True, verbose=False)
+    # for model in ['enh_exp', 'enh_act']:
+    #     # Filter act models also for blacklisted interactions
+    #     regulons_all[model], interactions_all[model], TF_TG_interactions_binary_all[model], TF_TG_interactions_weighted_all[model] = makeCustomNetwork(TG_models_scores[model], minimum_regulon_size=min_reg_size, number_edges=n_edges, filter_TGs=filter_TGs, filter_interactions=filter_int_TSS, filter_interactions_keep=True, verbose=False)
 
     # save models 
     path_to_save_models = result_folder_1
@@ -1052,9 +1075,10 @@ if __name__ == "__main__" :
     for integration_model in ['maxrank', 'meanrank', 'supportrank', 'PCA']:  
         regulons_all[integration_model+'_2'], interactions_all[integration_model+'_2'], TF_TG_interactions_binary_all[integration_model+'_2'], TF_TG_interactions_weighted_all[integration_model+'_2'] = rankIntegration(integrating_interactions, mode=integration_model, interactions = 20000, minimum_regulon_size = 10, verbose=False) 
 
-    new_samples = ['exp_exp',  'act_act', 'exp_act', 'act_exp', 'expCOP_exp', 'actCOP_act', 'expCOP_act', 'actCOP_exp',  'enh_act', 'enh_exp', 'maxrank_1', 'meanrank_1', 'supportrank_1', 'PCA_1', 'maxrank_2', 'meanrank_2', 'supportrank_2', 'PCA_2']
+    new_samples = ['exp_exp',  'act_act', 'exp_act', 'act_exp', 'expCOP_exp', 'actCOP_act', 'expCOP_act', 'actCOP_exp', 'maxrank_1', 'meanrank_1', 'supportrank_1', 'PCA_1', 'maxrank_2', 'meanrank_2', 'supportrank_2', 'PCA_2']
 
     # Calculate Regulon Activities for networks with AUCell
+    print("Calculating regulon activities...")
     all_activity_matrices = {}
     for sample in new_samples:
         net = regulons_all[sample]
@@ -1077,7 +1101,7 @@ if __name__ == "__main__" :
         all_activity_matrices[sample] = aucs_mtx
 
         # export
-        aucs_mtx.T.to_csv('GRN_test_runs/'+run_name+'/models_pruned/regulon_activity_AUCell'+sample+'regulon_activity.csv')
+        aucs_mtx.T.to_csv(base_result_path+run_name+'/regulon_activity_AUCell'+sample+'regulon_activity.csv')
 
         # Calculate thresholds 
         thresholds = binarize(aucs_mtx.T.values, seed=43, num_workers=3, method="hdt")
@@ -1087,4 +1111,5 @@ if __name__ == "__main__" :
         bin_mat = pd.DataFrame(aucs_mtx.T.values > thresholds.values.reshape(-1,1), dtype=int)
         bin_mat.index = aucs_mtx.T.index
         bin_mat.columns = aucs_mtx.T.columns
-        bin_mat.to_csv('GRN_test_runs/'+run_name+'/models_pruned/regulon_activity_AUCell'+sample+'regulon_binary_activity.csv')
+        bin_mat.to_csv(base_result_path+run_name+'/regulon_activity_AUCell'+sample+'regulon_binary_activity.csv')
+    print("Finished!")

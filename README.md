@@ -21,13 +21,23 @@ conda activate grnforge_env
 ```
 Python dependencies are documented at the top of each script and include:
 
-- numpy, pandas, scipy
+- numpy, pandas
 
-- scanpy
+- scikit-learn, scipy
 
-- snapatac2
+- pyBigWig
+
+- gimmemotifs
+
+- pybiomart
+
+- anndata
+
+- pyscenic
 
 - pybedtools
+
+- scanpy
 
 - xgboost
 
@@ -38,7 +48,7 @@ External tools used (optional for test dataset):
 
 - TOBIAS (ATAC footprinting): You can go to this reference and follow the instruction - [https://github.com/loosolab/TOBIAS](https://github.com/loosolab/TOBIAS) 
 
-- EnhLink (enhancer–target regression)
+- EnhLink (enhancer–target regression): You can go to this reference - [https://gitlab.com/Grouumf/enhlinktools](https://gitlab.com/Grouumf/enhlinktools) 
 
 
 ## 3. Repository structure
@@ -51,18 +61,23 @@ GRNforge/
 │       ├── scripts/
 │       └── results/
 │
-├── models/                       # stored predictive models
-├── results/                      # output from full pipeline runs
+├── models/                       # stored output of base model
+├── results/                      # output from files in pipeline
 │
-├── scripts/
-│   ├── tfbs_detection/           # motif scanning + footprint extraction
-│   ├── grn_prediction/           # base eGRN + XGBoost prediction
-│   └── grn_postprocessing/       # scoring, integration, and ranking
+└──scripts/
+    ├── tfbs_detection/           # motif scanning + footprint extraction + filter peaks and generate TFBS-peak
+    │   └──filter_peak_and_find_motifs.py
+    ├── grn_prediction/           # base eGRN + XGBoost prediction
+    │   ├──baseGRN.oy
+    │   └──modelling_v5.py
+    └── grn_postprocessing/       # scoring, ranking, evaluation
+        └──grn_postprocessing.py
 ```
+
 ## 4. Data preprocessing
 ### 1. RNA-seq
 - RNA-seq & ATAC-seq preprocessing
-    - Output of each file is a h5da file, which contain cell and gene information for each activity (gene activity from ATAC and gene expresison from RNA)
+    - Output of each file is a h5da file, which contain cell and gene information for each activity, with normalized value (gene activity from ATAC and gene expresison from RNA). 
 - FBS detection: to detect TF binding sites, we use
     - GimmeMotifs for motif scanning
     - TOBIAS for ATAC footprint correction and footprint scoring
@@ -118,9 +133,9 @@ Step 2 — Build the base eGRN
 python scripts/GRNforge/grn_prediction/baseGRN.py
 ```
 
-Step 3 — Train predictive models
+Step 3 — Train predictive models (run for 8 models)
 ```
-python scripts/GRNforge/grn_prediction/modelling_v5.py exp_exp 30 50 #model_mode start_chunk end_chunk
+python scripts/GRNforge/grn_prediction/modelling_v5.py 
 ```
 
 Step 4 — Post-processing

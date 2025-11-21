@@ -19,6 +19,16 @@ A small **test dataset** is included in ```data``` so users can easily try main 
 conda create -n grnforge_env python=3.11
 conda activate grnforge_env
 ```
+
+```bash
+git clone https://github.com/CBIGR/GRNforge.git
+cd GRNforge
+```
+
+```bash
+pip install -r requirements.txt
+
+```
 Python dependencies are documented at the top of each script and include:
 
 - numpy, pandas

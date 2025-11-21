@@ -6,8 +6,8 @@ from gimmemotifs.motif import default_motifs
 import pickle
 import pyBigWig
 import sys
-sys.path.append('/scratch/gent/vo/000/gvo00027/projects/CBIGR/software/pybiomart')
-sys.path.append('/scratch/gent/vo/000/gvo00027/projects/CBIGR/software/tmp/JLR_pybedtools/')
+# sys.path.append('/scratch/gent/vo/000/gvo00027/projects/CBIGR/software/pybiomart')
+# sys.path.append('/scratch/gent/vo/000/gvo00027/projects/CBIGR/software/tmp/JLR_pybedtools/')
 from pybiomart import Server
 import pybedtools
 
